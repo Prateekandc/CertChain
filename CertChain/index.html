@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertChain | Blockchain Credential Verification</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+
+    <nav class="bg-indigo-600 text-white p-4 shadow-md">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold tracking-wide">CertChain</h1>
+            <div id="status-badge" class="px-3 py-1 bg-yellow-500 text-white rounded-full text-sm font-semibold">
+                Checking connection...
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-6 mt-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <h2 class="text-xl font-bold text-indigo-600 mb-4 border-b pb-2">Issue New Certificate</h2>
+            <form id="issue-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Certificate File (PDF/Image)</label>
+                    <input type="file" id="issue-file" required class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Recipient Name</label>
+                    <input type="text" id="recipient" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., Arjun Sharma">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Course / Degree</label>
+                    <input type="text" id="course" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., B.Tech CSE">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Issuing Authority</label>
+                    <input type="text" id="authority" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., IIT Delhi">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 transition font-medium">
+                    Issue on Blockchain
+                </button>
+            </form>
+            <div id="issue-result" class="mt-4 text-sm hidden p-3 rounded-md"></div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <h2 class="text-xl font-bold text-green-600 mb-4 border-b pb-2">Verify Certificate</h2>
+            <p class="text-sm text-gray-600 mb-4">Upload a document to check if its cryptographic hash exists on the blockchain and hasn't been tampered with.</p>
+            
+            <form id="verify-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Upload Document to Verify</label>
+                    <input type="file" id="verify-file" required class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
+                </div>
+                <button type="submit" class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition font-medium">
+                    Verify Authenticity
+                </button>
+            </form>
+            
+            <div id="verify-result" class="mt-6 hidden">
+                <div id="verify-box" class="p-4 rounded-md border shadow-sm">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <span id="verify-icon" class="text-2xl">✅</span>
+                        <h3 id="verify-title" class="font-bold text-lg">Authentic Certificate</h3>
+                    </div>
+                    <div id="verify-details" class="text-sm space-y-1 mt-3">
+                        <p><strong>Recipient:</strong> <span id="v-recipient"></span></p>
+                        <p><strong>Course:</strong> <span id="v-course"></span></p>
+                        <p><strong>Authority:</strong> <span id="v-authority"></span></p>
+                        <p><strong>Issued At:</strong> <span id="v-date"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:5000";
+
+        // Check Health on Load
+        async function checkHealth() {
+            const badge = document.getElementById("status-badge");
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                if (data.blockchain === "connected") {
+                    badge.textContent = "🟢 Blockchain Connected";
+                    badge.className = "px-3 py-1 bg-green-500 text-white rounded-full text-sm font-semibold shadow";
+                } else {
+                    badge.textContent = "🔴 Blockchain Offline";
+                    badge.className = "px-3 py-1 bg-red-500 text-white rounded-full text-sm font-semibold shadow";
+                }
+            } catch (e) {
+                badge.textContent = "🔴 API Offline (Check Terminal)";
+                badge.className = "px-3 py-1 bg-red-500 text-white rounded-full text-sm font-semibold shadow";
+            }
+        }
+        window.onload = checkHealth;
+
+        // Handle Issuing
+        document.getElementById("issue-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const resultDiv = document.getElementById("issue-result");
+            resultDiv.className = "mt-4 text-sm p-3 rounded-md bg-blue-50 text-blue-700 block";
+            resultDiv.textContent = "Processing... hashing file and connecting to blockchain...";
+
+            try {
+                // 1. Hash the file
+                const fileInput = document.getElementById("issue-file");
+                const formData = new FormData();
+                formData.append("file", fileInput.files[0]);
+
+                let hashRes = await fetch(`${API_BASE}/hash`, { method: "POST", body: formData });
+                let hashData = await hashRes.json();
+                if (!hashRes.ok) throw new Error(hashData.error || "Hashing failed");
+
+                // 2. Issue on Blockchain
+                const issueData = {
+                    hash: hashData.hash,
+                    recipient: document.getElementById("recipient").value,
+                    course: document.getElementById("course").value,
+                    authority: document.getElementById("authority").value
+                };
+
+                let issueRes = await fetch(`${API_BASE}/issue`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(issueData)
+                });
+                
+                let issueResult = await issueRes.json();
+                if (!issueRes.ok) throw new Error(issueResult.error || "Issuance failed");
+
+                resultDiv.className = "mt-4 text-sm p-3 rounded-md bg-green-50 text-green-700 block border border-green-200";
+                resultDiv.innerHTML = `<strong>Success!</strong><br>Tx Hash: <span class="text-xs break-all">${issueResult.tx_hash}</span>`;
+                document.getElementById("issue-form").reset();
+
+            } catch (err) {
+                resultDiv.className = "mt-4 text-sm p-3 rounded-md bg-red-50 text-red-700 block border border-red-200";
+                resultDiv.textContent = `Error: ${err.message}`;
+            }
+        });
+
+        // Handle Verification
+        document.getElementById("verify-form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const verifyResult = document.getElementById("verify-result");
+            const verifyBox = document.getElementById("verify-box");
+            const verifyIcon = document.getElementById("verify-icon");
+            const verifyTitle = document.getElementById("verify-title");
+            const verifyDetails = document.getElementById("verify-details");
+            
+            verifyResult.classList.remove("hidden");
+            verifyBox.className = "p-4 rounded-md border shadow-sm bg-blue-50 border-blue-200";
+            verifyTitle.textContent = "Checking blockchain...";
+            verifyIcon.textContent = "⏳";
+            verifyDetails.classList.add("hidden");
+
+            try {
+                const fileInput = document.getElementById("verify-file");
+                const formData = new FormData();
+                formData.append("file", fileInput.files[0]);
+
+                let res = await fetch(`${API_BASE}/verify`, { method: "POST", body: formData });
+                let data = await res.json();
+
+                if (!res.ok) throw new Error(data.error || "Verification failed");
+
+                verifyDetails.classList.remove("hidden");
+
+                if (data.valid) {
+                    verifyBox.className = "p-4 rounded-md border shadow-sm bg-green-50 border-green-200 text-green-900";
+                    verifyIcon.textContent = "✅";
+                    verifyTitle.textContent = "Authentic Certificate";
+                    // FIX: Rebuild the HTML directly so it never gets lost
+                    verifyDetails.innerHTML = `
+                        <p><strong>Recipient:</strong> ${data.recipient}</p>
+                        <p><strong>Course:</strong> ${data.course}</p>
+                        <p><strong>Authority:</strong> ${data.authority}</p>
+                        <p><strong>Issued At:</strong> ${new Date(data.issued_at).toLocaleString()}</p>
+                    `;
+                } else {
+                    verifyBox.className = "p-4 rounded-md border shadow-sm bg-red-50 border-red-200 text-red-900";
+                    verifyIcon.textContent = "❌";
+                    verifyTitle.textContent = "Invalid or Tampered Document";
+                    verifyDetails.innerHTML = `<p class="text-red-700 mt-2">${data.reason || "This document's hash was not found on the blockchain."}</p>`;
+                }
+            } catch (err) {
+                verifyBox.className = "p-4 rounded-md border shadow-sm bg-red-50 border-red-200 text-red-900";
+                verifyIcon.textContent = "⚠️";
+                verifyTitle.textContent = "Error";
+                verifyDetails.classList.remove("hidden");
+                verifyDetails.innerHTML = `<p>${err.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>
